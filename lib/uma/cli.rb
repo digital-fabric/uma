@@ -12,6 +12,10 @@ module Uma
       case cmd
       when 'help'
         Help.new(argv, env).run
+      when 'serve'
+        Serve.new(argv, env).run
+      when 'version'
+        Version.new(argv, env).run
       when '', nil
         raise Error::NoCommand, ''
       else
@@ -90,6 +94,33 @@ module Uma
             error_msg:
           )
         end
+      end
+    end
+
+    class Version < Base
+      def run
+        print_message(env[:io_out], "Uma version #{Uma::VERSION}\n")
+      end
+    end
+
+    class Serve < Base
+      def run
+        parse_argv
+        supervisor_class = @env[:supervisor_class] || Object
+
+        supervisor_class.new(@env).start
+      rescue => e
+        if env[:error_handler]
+          env[:error_handler].(e)
+        else
+          ErrorResponse.new(e, @argv, @env).run
+        end
+      end
+
+      private
+
+      def parse_argv
+        
       end
     end
   end
