@@ -3,8 +3,8 @@
 
 require 'uma/cli'
 
-env = ENV.merge(
-  io_out: STDOUT
+env = ENV.to_h.merge(
+  io_out: STDOUT,
   io_err: STDERR
 )
-Uma::CLI.new(ARGV, env).run
+Uma::CLI.run(ARGV, env)
