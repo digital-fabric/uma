@@ -15,17 +15,17 @@ class CLITest < Minitest::Test
     io.read
   end
 
-  def cli_run(*argv)
+  def cli_cmd(*argv)
     env = @env.merge(
       io_out: (@io_out = StringIO.new),
       io_err: (@io_err = StringIO.new)
     )
 
     argv = argv.first if argv.size == 1 && argv.first.is_a?(Array)
-    CLI.run(argv, env)
+    CLI.(argv, env)
   end
 
-  def cli_run_raise(*argv)
+  def cli_cmd_raise(*argv)
     env = @env.merge(
       io_out: (@io_out = StringIO.new),
       io_err: (@io_err = StringIO.new),
@@ -33,30 +33,30 @@ class CLITest < Minitest::Test
     )
 
     argv = argv.first if argv.size == 1 && argv.first.is_a?(Array)
-    CLI.run(argv, env)
+    CLI.(argv, env)
   end
 
   CLI = Uma::CLI
   E = CLI::Error
 
   def test_cli_no_command
-    assert_raises(E::NoCommand) { cli_run_raise() }
+    assert_raises(E::NoCommand) { cli_cmd_raise() }
 
-    cli_run()
+    cli_cmd()
     assert_match(/│UMA│/, read_io(@io_err))
     assert_match(/Usage: uma \<COMMAND\>/, read_io(@io_err))
   end
 
   def test_cli_invalid_command
-    assert_raises(E::InvalidCommand) { cli_run_raise('foo') }
+    assert_raises(E::InvalidCommand) { cli_cmd_raise('foo') }
 
-    cli_run('foo')
+    cli_cmd('foo')
     assert_match(/Error\: unrecognized command/, read_io(@io_err))
     assert_match(/Usage: uma \<COMMAND\>/, read_io(@io_err))
   end
 
   def test_cli_help
-    cli_run_raise('help')
+    cli_cmd_raise('help')
     assert_match(/│UMA│/, read_io(@io_out))
     assert_match(/Usage: uma \<COMMAND\>/, read_io(@io_out))
   end
@@ -71,18 +71,27 @@ class CLITest < Minitest::Test
     end
   end
 
-  def test_cli_serve
-    # we only check that the commands starts a supervisor
+  def test_cli_version
+    cli_cmd_raise('version')
+    assert_equal "Uma version #{Uma::VERSION}\n", read_io(@io_out)
+  end
 
+  def test_cli_serve
     @env[:h] = {}
     @env[:supervisor_class] = MockSupervisor
     
-    cli_run_raise('serve')
+    cli_cmd_raise('serve')
     assert_kind_of Hash, @env[:h][:env]
   end
 
-  def test_cli_version
-    cli_run_raise('version')
-    assert_equal "Uma version #{Uma::VERSION}\n", read_io(@io_out)
+  def test_cli_serve_controller
+    @env[:h] = {}
+    @env[:norun] = true
+    
+    controller = cli_cmd_raise('serve')
+    assert_kind_of Uma::CLI::Serve, controller
+
+    supervisor = controller.supervisor
+    assert_kind_of Uma::Supervisor, supervisor
   end
 end
