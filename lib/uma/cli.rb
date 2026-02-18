@@ -2,7 +2,7 @@
 
 require 'uma/cli/error'
 require 'uma/version'
-require 'uma/supervisor'
+require 'uma/server'
 require 'optparse'
 
 module Uma
@@ -121,19 +121,19 @@ module Uma
     EOF
 
     class Serve < Base
-      attr_reader :supervisor
+      attr_reader :server
 
       def initialize(argv, env)
         super
-        supervisor_class = @env[:supervisor_class] || Uma::Supervisor
-        @supervisor = supervisor_class.new(@env)
+        server_class = env[:server_class] || Uma::Server
+        @server = server_class.new(@env)
       end
 
       def run
         parse_argv
 
         print_message(@env[:io_err], SERVE_BANNER)
-        @supervisor.start
+        @server.start
       rescue => e
         if env[:error_handler]
           env[:error_handler].(e)

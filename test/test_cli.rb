@@ -61,7 +61,12 @@ class CLITest < Minitest::Test
     assert_match(/Usage: uma \<COMMAND\>/, read_io(@io_out))
   end
 
-  class MockSupervisor
+  def test_cli_version
+    cli_cmd_raise('version')
+    assert_equal "Uma version #{Uma::VERSION}\n", read_io(@io_out)
+  end
+
+  class MockServer
     def initialize(env)
       @env = env
     end
@@ -71,14 +76,9 @@ class CLITest < Minitest::Test
     end
   end
 
-  def test_cli_version
-    cli_cmd_raise('version')
-    assert_equal "Uma version #{Uma::VERSION}\n", read_io(@io_out)
-  end
-
   def test_cli_serve
     @env[:h] = {}
-    @env[:supervisor_class] = MockSupervisor
+    @env[:server_class] = MockServer
     
     cli_cmd_raise('serve')
     assert_kind_of Hash, @env[:h][:env]
@@ -91,7 +91,7 @@ class CLITest < Minitest::Test
     controller = cli_cmd_raise('serve')
     assert_kind_of Uma::CLI::Serve, controller
 
-    supervisor = controller.supervisor
-    assert_kind_of Uma::Supervisor, supervisor
+    server = controller.server
+    assert_kind_of Uma::Server, server
   end
 end

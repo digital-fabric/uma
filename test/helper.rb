@@ -67,8 +67,12 @@ class UMBaseTest < Minitest::Test
   def teardown
     return if !@machine
 
-    # pending_fibers = @machine.pending_fibers
-    # raise "leaked fibers: #{pending_fibers}" if pending_fibers.size > 0
+    if ENV['UM_METRICS']
+      pp machine.metrics
+    end
+
+    pending_fibers = @machine.pending_fibers
+    raise "leaked fibers: #{pending_fibers}" if pending_fibers.size > 0
 
     GC.start
   end
