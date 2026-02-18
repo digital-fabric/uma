@@ -42,6 +42,12 @@ class ServerControlTest < UMBaseTest
     })
     assert_equal 2, config[:thread_count]
     assert_equal [['127.0.0.1', port1]], config[:bind_entries]
+
+    conn_proc = ->(machine, fd) { }
+    config = Uma::ServerControl.server_config({
+      connection_proc: conn_proc,
+    })
+    assert_equal conn_proc, config[:connection_proc]
   end
 
   def test_await_termination_term
@@ -131,7 +137,13 @@ class ServerControlTest < UMBaseTest
 
   def test_start_connection
     s1, s2 = UM.socketpair(UM::AF_UNIX, UM::SOCK_STREAM, 0)
-    config = {}
+    config = {
+      connection_proc: ->(machine, fd) {
+        buf = +''
+        machine.recv(fd, buf, 128, 0)
+        machine.send(fd, buf, buf.bytesize, 0)
+      }
+    }
     ff = Set.new
     
     f = ServerControl.start_connection(machine, config, ff, s2)
@@ -181,7 +193,6 @@ class ServerControlTest < UMBaseTest
       ]
     }
     connection_fibers = []
-
     accept_fibers = ServerControl.start_acceptors(machine, config, connection_fibers)
 
     assert_kind_of Set, accept_fibers
@@ -193,15 +204,18 @@ class ServerControlTest < UMBaseTest
     sock1 = machine.socket(UM::AF_INET, UM::SOCK_STREAM, 0, 0)
     res = machine.connect(sock1, '127.0.0.1', port1)
     assert_equal 0, res
+    machine.snooze
+    assert_equal 1, connection_fibers.size
 
     sock2 = machine.socket(UM::AF_INET, UM::SOCK_STREAM, 0, 0)
     res = machine.connect(sock2, '127.0.0.1', port2)
     assert_equal 0, res
+    machine.snooze
+    assert_equal 1, connection_fibers.size # first connection will have been closed already
 
     3.times { machine.snooze }
 
-    assert_equal 2, connection_fibers.size
-    assert_kind_of Fiber, connection_fibers.first
+    assert_equal 0, connection_fibers.size
   ensure
     machine.close(sock1) rescue nil
     machine.close(sock2) rescue nil
@@ -254,5 +268,44 @@ class ServerControlTest < UMBaseTest
     machine.close(sock1) rescue nil
     machine.close(sock2) rescue nil
     th&.kill
+  end
+
+  def test_start_acceptors_with_connection_proc
+    port1 = random_port
+    config = {
+      bind_entries: [
+        ['127.0.0.1', port1]
+      ],
+      connection_proc: ->(machine, fd) {
+        machine.send(fd, 'hi', 2, 0)
+      } 
+    }
+    connection_fibers = []
+    accept_fibers = ServerControl.start_acceptors(machine, config, connection_fibers)
+
+    assert_kind_of Set, accept_fibers
+    assert_equal 1, accept_fibers.size
+    assert_kind_of Fiber, accept_fibers.to_a.first
+
+    machine.sleep(0.05)
+
+    sock1 = machine.socket(UM::AF_INET, UM::SOCK_STREAM, 0, 0)
+    res = machine.connect(sock1, '127.0.0.1', port1)
+    assert_equal 0, res
+    buf = +''
+    machine.recv(sock1, buf, 128, 0)
+    assert_equal 'hi', buf
+  ensure
+    machine.close(sock1) rescue nil
+    if !accept_fibers.empty?
+      machine.sleep(0.05)
+      accept_fibers.each { machine.schedule(it, UM::Terminate.new) }
+      machine.await_fibers(accept_fibers)
+    end
+
+    if !connection_fibers.empty?
+      connection_fibers.each { machine.schedule(it, UM::Terminate.new) }
+      machine.await_fibers(connection_fibers)
+    end
   end
 end

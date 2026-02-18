@@ -31,7 +31,8 @@ module Uma
     def server_config(env)
       {
         thread_count: 2,
-        bind_entries: env[:bind] ? bind_entries(env[:bind]) : []
+        bind_entries: env[:bind] ? bind_entries(env[:bind]) : [],
+        connection_proc: env[:connection_proc]
       }
     end
 
@@ -107,9 +108,7 @@ module Uma
     def start_connection(machine, config, connection_fibers, fd)
       f = machine.spin do
         connection_fibers << f
-        buf = +''
-        machine.read(fd, buf, 128)
-        machine.write(fd, buf)
+        config[:connection_proc]&.(machine, fd)
       ensure
         machine.close(fd) rescue nil
         connection_fibers.delete(f)
