@@ -30,8 +30,30 @@ module Uma
 
     def server_config(env)
       {
-        thread_count: 2
+        thread_count: 2,
+        bind_entries: env[:bind] ? bind_entries(env[:bind]) : []
       }
+    end
+
+    def bind_entries(bind_value)
+      case bind_value
+      when Array
+        bind_value.map { parse_bind_spec(it) }
+      when String
+        [parse_bind_spec(bind_value)]
+      else
+        raise ArgumentError, "invalid bind value"
+      end
+    end
+
+    BIND_SPEC_RE = /^(.+)\:(\d+)$/.freeze
+
+    def parse_bind_spec(spec)
+      if (m = spec.match(BIND_SPEC_RE))
+        [m[1], m[2].to_i]
+      else
+        raise ArgumentError, "Invalid bind spec"
+      end
     end
 
     def start_worker_thread(config, stop_queue)
@@ -60,12 +82,15 @@ module Uma
 
       config[:bind_entries].each do
         host, port = it
-        set << machine.spin {
+        set << machine.spin do
           fd = prepare_listening_socket(machine, host, port)
           machine.accept_each(fd) {
             start_connection(machine, config, connection_fibers, it)
           }
-        }
+        rescue UM::Terminate
+        ensure
+          machine.close(fd)
+        end
       end
       set
     end
@@ -85,8 +110,8 @@ module Uma
         buf = +''
         machine.read(fd, buf, 128)
         machine.write(fd, buf)
-        machine.close(fd)
       ensure
+        machine.close(fd) rescue nil
         connection_fibers.delete(f)
       end
     end

@@ -6,6 +6,15 @@ require 'uma/server'
 class ServerControlTest < UMBaseTest
   ServerControl = Uma::ServerControl
 
+  @@port ||= 10001 + SecureRandom.rand(50000)
+  
+  def random_port
+    @@port_assign_mutex ||= Mutex.new
+    @@port_assign_mutex.synchronize do
+      @@port += 1
+    end
+  end
+
   def setup
     super
     @env = { foo: 42 }
@@ -14,6 +23,25 @@ class ServerControlTest < UMBaseTest
   def test_server_config
     config = Uma::ServerControl.server_config({})
     assert_equal 2, config[:thread_count]
+
+    port1 = random_port
+    port2 = random_port
+
+    port = random_port
+    config = Uma::ServerControl.server_config({
+      bind: ["127.0.0.1:#{port1}", "127.0.0.1:#{port2}"]
+    })
+    assert_equal 2, config[:thread_count]
+    assert_equal [
+      ['127.0.0.1', port1], ['127.0.0.1', port2]
+    ], config[:bind_entries]
+
+
+    config = Uma::ServerControl.server_config({
+      bind: "127.0.0.1:#{port1}"
+    })
+    assert_equal 2, config[:thread_count]
+    assert_equal [['127.0.0.1', port1]], config[:bind_entries]
   end
 
   def test_await_termination_term
@@ -125,16 +153,8 @@ class ServerControlTest < UMBaseTest
     machine.close(s2) rescue nil
   end
 
-  def assign_port
-    @@port_assign_mutex ||= Mutex.new
-    @@port_assign_mutex.synchronize do
-      @@port ||= 10001 + SecureRandom.rand(50000)
-      @@port += 1
-    end
-  end
-
   def test_prepare_listening_socket
-    port = assign_port
+    port = random_port
     listen_fd = ServerControl.prepare_listening_socket(machine, '127.0.0.1', port)
     assert_kind_of Integer, listen_fd
 
@@ -152,10 +172,12 @@ class ServerControlTest < UMBaseTest
   end
 
   def test_start_acceptors
-    port = assign_port
+    port1 = random_port
+    port2 = random_port
     config = {
       bind_entries: [
-        ['127.0.0.1', port]
+        ['127.0.0.1', port1],
+        ['127.0.0.1', port2]
       ]
     }
     connection_fibers = []
@@ -163,34 +185,74 @@ class ServerControlTest < UMBaseTest
     accept_fibers = ServerControl.start_acceptors(machine, config, connection_fibers)
 
     assert_kind_of Set, accept_fibers
-    assert_equal 1, accept_fibers.size
+    assert_equal 2, accept_fibers.size
     assert_kind_of Fiber, accept_fibers.to_a.first
 
-    10.times { machine.snooze }
+    machine.sleep(0.05)
 
-    sock = machine.socket(UM::AF_INET, UM::SOCK_STREAM, 0, 0)
-    res = machine.connect(sock, '127.0.0.1', port)
+    sock1 = machine.socket(UM::AF_INET, UM::SOCK_STREAM, 0, 0)
+    res = machine.connect(sock1, '127.0.0.1', port1)
+    assert_equal 0, res
+
+    sock2 = machine.socket(UM::AF_INET, UM::SOCK_STREAM, 0, 0)
+    res = machine.connect(sock2, '127.0.0.1', port2)
     assert_equal 0, res
 
     3.times { machine.snooze }
 
-    assert_equal 1, connection_fibers.size
+    assert_equal 2, connection_fibers.size
     assert_kind_of Fiber, connection_fibers.first
   ensure
-    accept_fibers.each { machine.schedule(it, UM::Terminate.new) }
-    machine.await_fibers(accept_fibers)
+    machine.close(sock1) rescue nil
+    machine.close(sock2) rescue nil
+    if !accept_fibers.empty?
+      machine.sleep(0.05)
+      accept_fibers.each { machine.schedule(it, UM::Terminate.new) }
+      machine.await_fibers(accept_fibers)
+    end
 
-    connection_fibers.each { machine.schedule(it, UM::Terminate.new) }
-    machine.await_fibers(connection_fibers)
+    if !connection_fibers.empty?
+      connection_fibers.each { machine.schedule(it, UM::Terminate.new) }
+      machine.await_fibers(connection_fibers)
+    end
   end
 
-  def start_test_worker_thread
-    config = {}
+  def test_start_worker_thread
+    port1 = random_port
+    port2 = random_port
+    config = {
+      bind_entries: [
+        ['127.0.0.1', port1],
+        ['127.0.0.1', port2]
+      ]
+    }
 
     stop_queue = UM::Queue.new
     th = ServerControl.start_worker_thread(config, stop_queue)
 
     machine.sleep(0.05)
     
+    sock1 = machine.socket(UM::AF_INET, UM::SOCK_STREAM, 0, 0)
+    res = machine.connect(sock1, '127.0.0.1', port1)
+    assert_equal 0, res
+
+    sock2 = machine.socket(UM::AF_INET, UM::SOCK_STREAM, 0, 0)
+    res = machine.connect(sock2, '127.0.0.1', port2)
+    assert_equal 0, res
+
+    machine.close(sock1)
+    machine.close(sock2)
+
+    machine.push(stop_queue, :stop)
+
+    th.join
+    th = nil
+
+    sock1 = machine.socket(UM::AF_INET, UM::SOCK_STREAM, 0, 0)
+    assert_raises(Errno::ECONNREFUSED) { machine.connect(sock1, '127.0.0.1', port1) }
+  ensure
+    machine.close(sock1) rescue nil
+    machine.close(sock2) rescue nil
+    th&.kill
   end
 end
