@@ -21,7 +21,7 @@ Gem::Specification.new do |s|
   s.required_ruby_version = '>= 3.4'
   s.executables = ['syntropy']
 
-  s.add_dependency 'uringmachine',  '>=0.27.0'
+  s.add_dependency 'uringmachine',  '>=0.28.0'
   s.add_dependency 'rack',          '~>3.2.5'
   s.add_dependency 'logger'
 

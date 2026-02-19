@@ -38,7 +38,7 @@ class HTTPTest < UMBaseTest
     buf = +''
     machine.recv(@s1, buf, 256, 0)
 
-    assert_equal "HTTP/1.1 200\r\ncontent-length: 12\r\n\r\nHello world!", buf
+    assert_equal "HTTP/1.1 200\r\ntransfer-encoding: chunked\r\n\r\nc\r\nHello world!\r\n0\r\n\r\n", buf
   ensure
     if f && !f.done?
       machine.schedule(f, UM::Terminate.new)
@@ -87,7 +87,57 @@ class HTTPTest < UMBaseTest
     buf = +''
     machine.recv(@s1, buf, 256, 0)
 
-    assert_equal "HTTP/1.1 200\r\nfoo: bar\r\ncontent-length: 5\r\n\r\nHello", buf
+    assert_equal "HTTP/1.1 200\r\nfoo: bar\r\ntransfer-encoding: chunked\r\n\r\n5\r\nHello\r\n0\r\n\r\n", buf
+  end
+
+  def test_send_rack_response_array
+    env = {}
+    resp = [200, { 'foo' => 'bar' }, ['Foo', 'baRbaZ']]
+    HTTP.send_rack_response(machine, env, @s2, resp)
+
+    buf = +''
+    machine.recv(@s1, buf, 256, 0)
+
+    assert_equal "HTTP/1.1 200\r\nfoo: bar\r\ntransfer-encoding: chunked\r\n\r\n3\r\nFoo\r\n6\r\nbaRbaZ\r\n0\r\n\r\n", buf
+  end
+
+  def test_send_rack_response_array
+    env = {}
+    resp = [200, { 'foo' => 'bar' }, ['Foo', 'baRbaZ']]
+    HTTP.send_rack_response(machine, env, @s2, resp)
+
+    buf = +''
+    machine.recv(@s1, buf, 256, 0)
+
+    assert_equal "HTTP/1.1 200\r\nfoo: bar\r\ntransfer-encoding: chunked\r\n\r\n3\r\nFoo\r\n6\r\nbaRbaZ\r\n0\r\n\r\n", buf
+  end
+
+  def test_send_rack_response_enumerable
+    env = {}
+    set = Set.new
+    set << 'abc' << 'defg'
+    resp = [200, { 'foo' => 'bar' }, set]
+    HTTP.send_rack_response(machine, env, @s2, resp)
+
+    buf = +''
+    machine.recv(@s1, buf, 256, 0)
+
+    assert_equal "HTTP/1.1 200\r\nfoo: bar\r\ntransfer-encoding: chunked\r\n\r\n3\r\nabc\r\n4\r\ndefg\r\n0\r\n\r\n", buf
+  end
+
+  def test_send_rack_response_callable
+    env = {}
+    resp = [200, { 'foo' => 'bar' }, ->(stream) do
+      stream << 'hiho'
+      stream << 'encyclopaedia'
+    end]
+    # read_stream = UM::Stream.new(machine, @s1)
+    HTTP.send_rack_response(machine, env, @s2, resp)
+    machine.close(@s2)
+
+    buf = +''
+    machine.recv(@s1, buf, 128, 0)
+    assert_equal "HTTP/1.1 200\r\nfoo: bar\r\ntransfer-encoding: chunked\r\n\r\n4\r\nhiho\r\nd\r\nencyclopaedia\r\n0\r\n\r\n", buf
   end
 
   class MockErrorStream
@@ -112,16 +162,11 @@ class HTTPTest < UMBaseTest
     config = Uma::ServerControl.server_config({
       error_stream: MockErrorStream.new { |w| STDERR << w }
     })
-    # config = {
-    #   app:,
-    #   error_handler: ->(e) { raise e },
-    #   error_stream: MockErrorStream.new { |w| STDERR << w }
-    # }
 
     machine.sendv(fd1, req)
     stream = UM::Stream.new(machine, fd2)
     env = HTTP.get_request_env(config, stream)
-
+    
     return if !send_resp
 
     response = app.(env)
@@ -144,14 +189,28 @@ class HTTPTest < UMBaseTest
   end
 
   def test_get_basic
-    app = ->(env) {
-      [200, {}, 'Hello']
-    }    
+    req_resp_lint(
+      ->(env) { [200, {}, 'Hello'] },
+      "GET / HTTP/1.1\r\n\r\n",
+      "HTTP/1.1 200\r\ntransfer-encoding: chunked\r\n\r\n5\r\nHello\r\n0\r\n\r\n"
+    )
 
     req_resp_lint(
-      app,
-      "GET / HTTP/1.1*\r\n\r\n",
-      "HTTP/1.1 200\r\ncontent-length: 5\r\n\r\nHello"
+      ->(env) { [404, {}, ''] },
+      "GET / HTTP/1.1\r\n\r\n",
+      "HTTP/1.1 404\r\ncontent-length: 0\r\n\r\n"
+    )
+  end
+
+  def test_post_with_body
+    chunks = []
+    req_resp_lint(
+      ->(env) {
+        env['rack.input'].each { chunks << it }
+        [200, {}, chunks]
+      },
+      "POST /foo HTTP/1.1\r\ntransfer-encoding: chunked\r\n\r\nb\r\nwowie-zowie\r\n3\r\nwow\r\n0\r\n\r\n",
+      "HTTP/1.1 200\r\ntransfer-encoding: chunked\r\n\r\nb\r\nwowie-zowie\r\n3\r\nwow\r\n0\r\n\r\n"
     )
   end
 end
