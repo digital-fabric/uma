@@ -3,6 +3,7 @@ PATH
   specs:
     Uma (0.0.1)
       logger
+      rack (~> 3.2.5)
       uringmachine (>= 0.27.0)
 
 GEM
@@ -12,6 +13,7 @@ GEM
     minitest (6.0.1)
       prism (~> 1.5)
     prism (1.9.0)
+    rack (3.2.5)
     rake (13.3.1)
     uringmachine (0.27.0)
 
@@ -29,6 +31,7 @@ CHECKSUMS
   logger (1.7.0) sha256=196edec7cc44b66cfb40f9755ce11b392f21f7967696af15d274dde7edff0203
   minitest (6.0.1) sha256=7854c74f48e2e975969062833adc4013f249a4b212f5e7b9d5c040bf838d54bb
   prism (1.9.0) sha256=7b530c6a9f92c24300014919c9dcbc055bf4cdf51ec30aed099b06cd6674ef85
+  rack (3.2.5) sha256=4cbd0974c0b79f7a139b4812004a62e4c60b145cba76422e288ee670601ed6d3
   rake (13.3.1) sha256=8c9e89d09f66a26a01264e7e3480ec0607f0c497a861ef16063604b1b08eb19c
   uringmachine (0.27.0) sha256=6e83721c42a57c1e240b61be0cd8f6c9c2878838dc30b7dc666f106a1216ec2f
 

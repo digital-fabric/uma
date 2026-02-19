@@ -2,6 +2,8 @@
 
 require_relative 'helper'
 require 'uma/http'
+require 'uma/server'
+require 'rack/lint'
 
 class HTTPTest < UMBaseTest
 
@@ -10,6 +12,11 @@ class HTTPTest < UMBaseTest
   def setup
     super
     @s1, @s2 = UM.socketpair(UM::AF_UNIX, UM::SOCK_STREAM, 0)
+  end
+
+  def teardown
+    machine.close(@s1) rescue nil
+    machine.close(@s2) rescue nil
   end
 
   def test_request_response_cycle
@@ -31,7 +38,7 @@ class HTTPTest < UMBaseTest
     buf = +''
     machine.recv(@s1, buf, 256, 0)
 
-    assert_equal "HTTP/1.1 200\r\n\r\nHello world!", buf
+    assert_equal "HTTP/1.1 200\r\ncontent-length: 12\r\n\r\nHello world!", buf
   ensure
     if f && !f.done?
       machine.schedule(f, UM::Terminate.new)
@@ -43,29 +50,29 @@ class HTTPTest < UMBaseTest
     skip "Not yet implemented"
   end
 
-  def test_format_response_headers
-    h = HTTP.format_response_headers({})
+  def test_format_headers
+    h = HTTP.format_headers({})
     assert_equal "\r\n", h
 
-    h = HTTP.format_response_headers({
+    h = HTTP.format_headers({
       'foo' => 'bar'
     })
     assert_equal "foo: bar\r\n\r\n", h
 
-    h = HTTP.format_response_headers({
+    h = HTTP.format_headers({
       'foo' => 'bar',
       'bar' => 'baz'
     })
     assert_equal "foo: bar\r\nbar: baz\r\n\r\n", h
 
-    h = HTTP.format_response_headers({
+    h = HTTP.format_headers({
       'foo' => 'bar',
       'bar' => ['baz', 'bazz', 'bazzz']
     })
     assert_equal "foo: bar\r\nbar: baz\r\nbar: bazz\r\nbar: bazzz\r\n\r\n", h
 
     assert_raises(HTTP::ResponseError) {
-      HTTP.format_response_headers({
+      HTTP.format_headers({
         'foo' => 'bar',
         'bar' => 123
       })
@@ -80,6 +87,71 @@ class HTTPTest < UMBaseTest
     buf = +''
     machine.recv(@s1, buf, 256, 0)
 
-    assert_equal "HTTP/1.1 200\r\nfoo: bar\r\n\r\nHello", buf
+    assert_equal "HTTP/1.1 200\r\nfoo: bar\r\ncontent-length: 5\r\n\r\nHello", buf
+  end
+
+  class MockErrorStream
+    def initialize(&block)
+      @write_block = block
+    end
+
+    def puts(s)
+      write("#{s}\n")
+    end
+
+    def write(s)
+      @write_block.(s)
+    end
+
+    def flush = self
+    def close = self
+  end
+  def make_http_request(app, req, send_resp = true)
+    fd1, fd2 = UM.socketpair(UM::AF_UNIX, UM::SOCK_STREAM, 0)
+
+    config = Uma::ServerControl.server_config({
+      error_stream: MockErrorStream.new { |w| STDERR << w }
+    })
+    # config = {
+    #   app:,
+    #   error_handler: ->(e) { raise e },
+    #   error_stream: MockErrorStream.new { |w| STDERR << w }
+    # }
+
+    machine.sendv(fd1, req)
+    stream = UM::Stream.new(machine, fd2)
+    env = HTTP.get_request_env(config, stream)
+
+    return if !send_resp
+
+    response = app.(env)
+    HTTP.send_rack_response(machine, env, fd2, response)
+
+    buf = +''
+    machine.recv(fd1, buf, 256, 0)
+    buf
+  ensure
+    machine.close(fd1)
+    machine.close(fd2)
+  end
+
+  def req_resp_lint(app, req, expected_resp)
+    lint_app = Rack::Lint.new(app)
+    make_http_request(lint_app, req, false)
+
+    resp = make_http_request(app, req)
+    assert_equal expected_resp, resp
+  end
+
+  def test_get_basic
+    app = ->(env) {
+      [200, {}, 'Hello']
+    }    
+
+    req_resp_lint(
+      app,
+      "GET / HTTP/1.1*\r\n\r\n",
+      "HTTP/1.1 200\r\ncontent-length: 5\r\n\r\nHello"
+    )
   end
 end

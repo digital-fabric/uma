@@ -22,7 +22,7 @@ Gem::Specification.new do |s|
   s.executables = ['syntropy']
 
   s.add_dependency 'uringmachine',  '>=0.27.0'
-
+  s.add_dependency 'rack',          '~>3.2.5'
   s.add_dependency 'logger'
 
   s.add_development_dependency 'minitest',  '~>6.0.1'

@@ -12,20 +12,37 @@ module Uma
     def http_connection(machine, config, fd)
       stream = UM::Stream.new(machine, fd)
       while true
-        break if !handle_request(machine, config, fd, stream)
+        break if !process_request(machine, config, fd, stream)
       end
     end
 
-    def handle_request(machine, config, fd, stream)
+    def process_request(machine, config, fd, stream)
+      env = get_request_env(config, stream)
+
+      rack_response = config[:app].(env)
+      send_rack_response(machine, env, fd, rack_response)
+
+      should_process_next_request?(env)
+    rescue => e
+      if (h = config[:error_handler])
+        h.(e)
+      else
+        send_error_response(machine, fd, e)
+      end
+    end
+
+    def get_request_env(config, stream)
       env = {
         'rack.url_scheme' => 'http',
-
+        'SCRIPT_NAME' => '',
+        'SERVER_NAME' => 'localhost',
+        'rack.errors' => config[:error_stream]
       }
       buf = +''
       ret = stream.get_line(buf, 4096)
       return if !ret
 
-      parse_request_line(config, env, buf)
+      parse_request_line(env, buf)
       while true
         ret = stream.get_line(buf, 4096)
         raise ParseError, "Unexpected EOF" if !ret
@@ -33,29 +50,19 @@ module Uma
 
         parse_header(env, buf)
       end
-
-      # env[:body_reader] = ->() { read_body(stream) }
-
-      rack_response = config[:app].(env)
-      send_rack_response(machine, env, fd, rack_response)
-
-      should_process_next_request?(env)
-    rescue => e
-      send_error_response(machine, fd, e)
+      env
     end
 
     RE_REQUEST_LINE = /^([a-z]+)\s+([^\s\?]+)(?:\?([^\s]+))?\s+(http\/[019\.]{1,3})/i
 
-    def parse_request_line(config, env, line)
+    def parse_request_line(env, line)
       m = line.match(RE_REQUEST_LINE)
       raise ParseError, 'Invalid request line' if !m
 
       env['REQUEST_METHOD']   = m[1].downcase
-      env['SCRIPT_NAME']      = '/' # app's mount point, should come from config
       env['PATH_INFO']        = m[2]
       env['QUERY_STRING']     = m[3] || ''
       env['SERVER_PROTOCOL']  = m[4]
-      env['SERVER_PORT']      = 80 # should come from config
     end
 
     RE_HEADER_LINE = /^([a-z0-9-]+):\s+(.+)/i
@@ -81,14 +88,25 @@ module Uma
 
     def send_rack_response(machine, env, fd, response)
       status, headers, body = response
-      
+
+      case body
+      when nil, ''
+        headers['content-length'] = 0
+      else
+        headers['content-length'] = body.size.to_s
+      end
+
       buf1 = "HTTP/1.1 #{status}\r\n"
-      buf2 = format_response_headers(headers)
+      buf2 = format_headers(headers)
       
-      machine.sendv(fd, buf1, buf2, body)
+      if body
+        machine.sendv(fd, buf1, buf2, body)
+      else
+        machine.sendv(fd, buf1, buf2)
+      end
     end
 
-    def format_response_headers(headers)
+    def format_headers(headers)
       buf = +''
       headers.each do |k, v|
         next if k =~ /^rack\./
@@ -99,7 +117,7 @@ module Uma
         when Array
           v.each { buf << "#{k}: #{it}\r\n" }
         else
-          raise ResponseError, 'Invalid header value'
+          raise ResponseError, "Invalid header value #{v.inspect}"
         end
       end
       buf << "\r\n"

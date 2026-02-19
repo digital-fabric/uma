@@ -39,7 +39,8 @@ module Uma
       {
         thread_count: 2,
         bind_entries: env[:bind] ? bind_entries(env[:bind]) : [],
-        connection_proc: env[:connection_proc]
+        connection_proc: env[:connection_proc],
+        error_stream: env[:error_stream]
       }
     end
 
