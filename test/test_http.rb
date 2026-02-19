@@ -202,7 +202,7 @@ class HTTPTest < UMBaseTest
     )
   end
 
-  def test_post_with_body
+  def test_post_with_body_chunked
     chunks = []
     req_resp_lint(
       ->(env) {
@@ -211,6 +211,18 @@ class HTTPTest < UMBaseTest
       },
       "POST /foo HTTP/1.1\r\ntransfer-encoding: chunked\r\n\r\nb\r\nwowie-zowie\r\n3\r\nwow\r\n0\r\n\r\n",
       "HTTP/1.1 200\r\ntransfer-encoding: chunked\r\n\r\nb\r\nwowie-zowie\r\n3\r\nwow\r\n0\r\n\r\n"
+    )
+  end
+
+  def test_post_with_body_unchunked
+    chunks = []
+    req_resp_lint(
+      ->(env) {
+        env['rack.input'].each { chunks << it }
+        [200, {}, chunks]
+      },
+      "POST /foo HTTP/1.1\r\ncontent-length: 11\r\n\r\nwowie-zowie",
+      "HTTP/1.1 200\r\ntransfer-encoding: chunked\r\n\r\nb\r\nwowie-zowie\r\n0\r\n\r\n"
     )
   end
 end

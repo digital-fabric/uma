@@ -51,7 +51,7 @@ module Uma
       def each(&)
         if @env['HTTP_TRANSFER_ENCODING'] == 'chunked'
           read_chunks(&)
-        elsif (v = @env['HTTP_CONTENT_LENGTH'])
+        elsif (v = @env['CONTENT_LENGTH'])
           len = v.to_i
           yield @stream.get_string(+'', len)
         end
