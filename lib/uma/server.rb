@@ -10,18 +10,25 @@ module Uma
     end
 
     def start
-      machine = UM.new
-      stop_queue = UM::Queue.new
+      @machine = UM.new
+      @stop_queue = UM::Queue.new
 
-      config = ServerControl.server_config(@env)
-      threads = config[:thread_count].times.map {
-        ServerControl.start_worker_thread(config, stop_queue)
+      @config = ServerControl.server_config(@env)
+      @threads = @config[:thread_count].times.map {
+        ServerControl.start_worker_thread(@config, @stop_queue)
       }
       
-      ServerControl.await_termination(machine)
+      ServerControl.await_process_termination(@machine)
 
-      config[:thread_count].times { machine.push(stop_queue, :stop) }
-      threads.each(&:join)
+      stop
+    end
+
+    def stop
+      return if !@threads
+
+      @config[:thread_count].times { @machine.push(@stop_queue, :stop) }
+      @threads.each(&:join)
+      @threads = nil
     end
   end
 
@@ -130,15 +137,16 @@ module Uma
       end
     end
 
-    def await_termination(machine)
+    def await_process_termination(machine)
       sig_queue = UM::Queue.new
-      trap('SIGTERM') {
+      
+      old_term_handler = trap('SIGTERM') {
         machine.push(sig_queue, :term)
-        trap('SIGTERM') { exit! }
+        trap('SIGTERM', old_term_handler)
       }
-      trap('SIGINT')  {
+      old_int_handler = trap('SIGINT')  {
         machine.push(sig_queue, :int)
-        trap('SIGTERM') { exit! }
+        trap('SIGINT', old_int_handler)
       }
 
       machine.shift(sig_queue)

@@ -140,6 +140,8 @@ module Uma
         else
           ErrorResponse.new(e, @argv, @env).run
         end
+      ensure
+        @server.stop
       end
 
       private

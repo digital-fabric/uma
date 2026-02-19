@@ -2,4 +2,4 @@ source 'https://gem.coop'
 
 gemspec
 
-gem "uringmachine", path: '../uringmachine'
+# gem "uringmachine", path: '../uringmachine'

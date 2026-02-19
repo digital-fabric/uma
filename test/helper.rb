@@ -81,10 +81,11 @@ class UMBaseTest < Minitest::Test
     @scheduler.calls.map { it[:sym] }.tally
   end
 
-  def assign_port
+  @@port ||= 10001 + SecureRandom.rand(50000)
+  
+  def random_port
     @@port_assign_mutex ||= Mutex.new
     @@port_assign_mutex.synchronize do
-      @@port ||= 1024 + SecureRandom.rand(60000)
       @@port += 1
     end
   end

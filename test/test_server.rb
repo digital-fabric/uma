@@ -6,15 +6,6 @@ require 'uma/server'
 class ServerControlTest < UMBaseTest
   ServerControl = Uma::ServerControl
 
-  @@port ||= 10001 + SecureRandom.rand(50000)
-  
-  def random_port
-    @@port_assign_mutex ||= Mutex.new
-    @@port_assign_mutex.synchronize do
-      @@port += 1
-    end
-  end
-
   def setup
     super
     @env = { foo: 42 }
@@ -50,13 +41,13 @@ class ServerControlTest < UMBaseTest
     assert_equal conn_proc, config[:connection_proc]
   end
 
-  def test_await_termination_term
+  def test_await_process_termination_term
     r, w = UM.pipe
     pid = fork do
       m = UM.new
       m.close(r)
       m.spin { sleep(0.05); m.write(w, 'ready') }
-      ServerControl.await_termination(m)
+      ServerControl.await_process_termination(m)
       m.write(w, 'done')
       m.close(w)
     end
@@ -78,13 +69,13 @@ class ServerControlTest < UMBaseTest
     end
   end
 
-  def test_await_termination_int
+  def test_await_process_termination_int
     r, w = UM.pipe
     pid = fork do
       m = UM.new
       m.close(r)
       m.spin { sleep(0.05); m.write(w, 'ready') }
-      ServerControl.await_termination(m)
+      ServerControl.await_process_termination(m)
       m.write(w, 'done')
       m.close(w)
     end
