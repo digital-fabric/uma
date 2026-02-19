@@ -92,8 +92,8 @@ module Uma
         host, port = it
         set << machine.spin do
           fd = prepare_listening_socket(machine, host, port)
-          machine.accept_each(fd) {
-            start_connection(machine, config, connection_fibers, it)
+          machine.accept_each(fd) { |fd|
+            start_connection(machine, config, connection_fibers, fd)
           }
         rescue UM::Terminate
         ensure

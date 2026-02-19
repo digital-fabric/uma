@@ -299,4 +299,46 @@ class ServerControlTest < UMBaseTest
       machine.await_fibers(connection_fibers)
     end
   end
+
+  def test_start_acceptors_with_connection_proc_with_stream
+    port1 = random_port
+    config = {
+      bind_entries: [
+        ['127.0.0.1', port1]
+      ],
+      connection_proc: ->(machine, fd) {
+        stream = UM::Stream.new(machine, fd)
+        msg = stream.get_line(nil, 0)
+        machine.send(fd, msg, msg.bytesize, 0)
+      }
+    }
+    connection_fibers = []
+    accept_fibers = ServerControl.start_acceptors(machine, config, connection_fibers)
+
+    assert_kind_of Set, accept_fibers
+    assert_equal 1, accept_fibers.size
+    assert_kind_of Fiber, accept_fibers.to_a.first
+
+    machine.sleep(0.05)
+
+    sock1 = machine.socket(UM::AF_INET, UM::SOCK_STREAM, 0, 0)
+    res = machine.connect(sock1, '127.0.0.1', port1)
+    assert_equal 0, res
+    machine.send(sock1, "bar\n", 4, 0)
+    buf = +''
+    machine.recv(sock1, buf, 128, 0)
+    assert_equal 'bar', buf
+  ensure
+    machine.close(sock1) rescue nil
+    if !accept_fibers.empty?
+      machine.sleep(0.05)
+      accept_fibers.each { machine.schedule(it, UM::Terminate.new) }
+      machine.await_fibers(accept_fibers)
+    end
+
+    if !connection_fibers.empty?
+      connection_fibers.each { machine.schedule(it, UM::Terminate.new) }
+      machine.await_fibers(connection_fibers)
+    end
+  end
 end
