@@ -2,50 +2,24 @@
 
 module Uma
   module HTTP
-    
     class Error < StandardError; end
     class ParseError < Error; end
     class ResponseError < Error; end
 
-    extend self
-    
-    def http_connection(machine, config, fd)
-      stream = UM::Stream.new(machine, fd)
-      while true
-        break if !process_request(machine, config, fd, stream)
-      end
-    end
-
-    def process_request(machine, config, fd, stream)
-      env = get_request_env(config, stream)
-
-      rack_response = config[:app].(env)
-      send_rack_response(machine, env, fd, rack_response)
-
-      should_process_next_request?(env)
-    rescue => e
-      if (h = config[:error_handler])
-        h.(e)
-      else
-        p e
-        p e.backtrace
-        exit!
-        send_error_response(machine, fd, e)
-      end
-    end
-
-    class RackInputStream
+    class RackIO
       def initialize(env, stream)
         @env = env
         @stream = stream
+        @machine = stream.machine
+        @fd = stream.fd
       end
 
       def gets
         @stream.get_line(nil, 0)
       end
 
-      def read(length, buf = +'')
-        @stream.get_string(buf, length)
+      def read(len, buf = +'')
+        @stream.get_string(buf, -30)
       end
 
       def each(&)
@@ -71,6 +45,93 @@ module Uma
       end
 
       def close
+        @machine.close(@fd)
+      end
+
+      def puts(str)
+        write("#{str}\n")
+      end
+
+      def write(*bufs)
+        @machine.writev(@fd, *bufs)
+      end
+      alias_method :<<, :write
+    end
+
+    class ChunkedIO
+      def initialize(machine, fd, stream)
+        @machine = machine
+        @fd = fd
+        @stream = stream
+        @first_write = true
+      end
+
+      def read(len, buf = +'')
+        stream.get_string(buf, len)
+        buf
+      end
+
+      def write(*chunks)
+        bufs = []
+        chunks.each do
+          bufs << (@first_write ? "#{it.bytesize.to_s(16)}\r\n" : "\r\n#{it.bytesize.to_s(16)}\r\n")
+          bufs << it
+          @first_write = false
+        end
+        @machine.sendv(@fd, *bufs)
+      end
+      alias_method :<<, :write
+
+      def flush
+      end
+
+      def close_read
+        @machine.shutdown(@fd, UM::SHUT_RD)
+      end
+
+      def close_write
+        @machine.shutdown(@fd, UM::SHUT_WR)
+      end
+
+      def close
+        return if @closed
+
+        @closed = true
+        chunked_ending = @first_write ? "0\r\n\r\n" : "\r\n0\r\n\r\n"
+        @machine.sendv(@fd, chunked_ending)
+      end
+
+      def closed?
+        @closed
+      end
+    end
+
+    extend self
+    
+    def http_connection(machine, config, fd)
+      stream = UM::Stream.new(machine, fd)
+      while true
+        break if !process_request(machine, config, fd, stream)
+      end
+    end
+
+    def process_request(machine, config, fd, stream)
+      env = get_request_env(config, stream)
+
+      rack_response = config[:app].(env)
+      if !env['uma.hijacked?']
+        send_rack_response(machine, env, fd, rack_response)
+      end
+
+      should_process_next_request?(env)
+    rescue => e
+      if (h = config[:error_handler])
+        h.(e)
+      else
+        p e
+        p e.backtrace
+        exit!
+        send_error_response(machine, fd, e)
       end
     end
 
@@ -80,6 +141,10 @@ module Uma
         'SCRIPT_NAME'   => '',
         'SERVER_NAME'   => 'localhost',
         'rack.hijack?'  => true,
+        'rack.hijack'   => -> {
+          env['uma.hijacked?'] = true
+          env['rack.hijack'] = env['rack.input'] || RackIO.new(env, stream)
+        },
         'rack.errors'   => config[:error_stream]
       }
       buf = +''
@@ -96,7 +161,7 @@ module Uma
       end
 
       if env['CONTENT_LENGTH'] || env['HTTP_TRANSFER_ENCODING'] == 'chunked'
-        env['rack.input'] = RackInputStream.new(env, stream)
+        env['rack.input'] = RackIO.new(env, stream)
       end
       env
     end
@@ -162,54 +227,6 @@ module Uma
       end
     end
 
-    class ChunkedStream
-      def initialize(machine, fd, stream)
-        @machine = machine
-        @fd = fd
-        @stream = stream
-        @first_write = true
-      end
-
-      def read(len, buf = +'')
-        stream.get_string(buf, len)
-        buf
-      end
-
-      def write(*chunks)
-        bufs = []
-        chunks.each do
-          bufs << (@first_write ? "#{it.bytesize.to_s(16)}\r\n" : "\r\n#{it.bytesize.to_s(16)}\r\n")
-          bufs << it
-          @first_write = false
-        end
-        @machine.sendv(@fd, *bufs)
-      end
-      alias_method :<<, :write
-
-      def flush
-      end
-
-      def close_read
-        @machine.shutdown(@fd, UM::SHUT_RD)
-      end
-
-      def close_write
-        @machine.shutdown(@fd, UM::SHUT_WR)
-      end
-
-      def close
-        return if @closed
-
-        @closed = true
-        chunked_ending = @first_write ? "0\r\n\r\n" : "\r\n0\r\n\r\n"
-        @machine.sendv(@fd, chunked_ending)
-      end
-
-      def closed?
-        @closed
-      end
-    end
-
     def send_body_chunked(machine, env, fd, buf_status, buf_headers, body)
       case body
       when String
@@ -247,7 +264,7 @@ module Uma
           machine.sendv(fd, first ? "0\r\n\r\n" : "\r\n0\r\n\r\n")
         elsif body.respond_to?(:call)
           machine.sendv(fd, buf_status, buf_headers)
-          chunked_stream = ChunkedStream.new(machine, fd, env['uma.stream'])
+          chunked_stream = ChunkedIO.new(machine, fd, env['uma.stream'])
           body.call(chunked_stream)
         else
           raise ResponseError, "Invalid response body: #{body.inspect}"

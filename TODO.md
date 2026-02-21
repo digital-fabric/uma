@@ -12,3 +12,24 @@ Rack interface.
   - Clear lifecycle management - start, run, stop
   - Each thread sets up a UringMachine instance and a fiber scheduler
   - Graceful stop
+
+- [v] server
+
+- [v] http rack control cycle
+
+- [ ] Rack hijack (full/partial)
+- [ ] More Rack tests. Where can they come from?
+  - [ ] Roda apps
+
+- [ ] application loading / bootstrapping
+  - [ ] load .ru files
+  - [ ] process warmup
+
+- [ ] benchmarks
+  - [ ] compare to falcon, puma
+  - [ ] using a Roda app with a few different endpoints representing different
+    types of requests:
+    - [ ] GET rendered template, simulate DB select query
+    - [ ] POST params, simulate DB update query, response redirects to another URL
+    - [ ] POST params, simulate DB update query, JSON response
+  - [ ] different concurrency levels: 10 50 100 500 1000 5000

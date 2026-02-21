@@ -164,20 +164,23 @@ class HTTPTest < UMBaseTest
     })
 
     machine.sendv(fd1, req)
+    machine.shutdown(fd1, UM::SHUT_WR)
     stream = UM::Stream.new(machine, fd2)
     env = HTTP.get_request_env(config, stream)
     
     return if !send_resp
 
     response = app.(env)
-    HTTP.send_rack_response(machine, env, fd2, response)
+    if !env['uma.hijacked?']
+      HTTP.send_rack_response(machine, env, fd2, response)
+    end
 
     buf = +''
     machine.recv(fd1, buf, 256, 0)
     buf
   ensure
     machine.close(fd1)
-    machine.close(fd2)
+    machine.close(fd2) rescue nil
   end
 
   def req_resp_lint(app, req, expected_resp)
@@ -223,6 +226,24 @@ class HTTPTest < UMBaseTest
       },
       "POST /foo HTTP/1.1\r\ncontent-length: 11\r\n\r\nwowie-zowie",
       "HTTP/1.1 200\r\ntransfer-encoding: chunked\r\n\r\nb\r\nwowie-zowie\r\n0\r\n\r\n"
+    )
+  end
+
+  def test_full_hijack
+    req_resp_lint(
+      ->(env) {
+        if env['rack.hijack?']
+          io = env['rack.hijack'].()
+          io.puts 'foo1'
+          msg = io.read(50)
+          io << "You said: #{msg}"
+          io.close
+        else
+          [500, {}, "No hijack"]
+        end
+      },
+      "GET / HTTP/1.1\r\n\r\nblahBlah",
+      "foo1\nYou said: blahBlah"
     )
   end
 end
