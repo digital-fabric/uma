@@ -203,20 +203,26 @@ module Uma
 
     def send_rack_response(machine, env, fd, response)
       status, headers, body = response
+      hijack = headers['rack.hijack']
 
-      chunked = nil
-      case body
-      when nil, ''
-        headers['content-length'] = '0'
+      if !hijack
+        chunked = nil
+        case body
+        when nil, ''
+          headers['content-length'] = '0'
+        end
+
+        chunked = !headers['content-length']
+        headers['transfer-encoding'] = 'chunked' if chunked
       end
-
-      chunked = !headers['content-length']
-      headers['transfer-encoding'] = 'chunked' if chunked
 
       buf_status = "HTTP/1.1 #{status}\r\n"
       buf_headers = format_headers(headers)
       
-      if body
+      if hijack
+        machine.sendv(fd, buf_status, buf_headers)
+        hijack.(env['rack.hijack'].())
+      elsif body
         if chunked
           send_body_chunked(machine, env, fd, buf_status, buf_headers, body)
         else

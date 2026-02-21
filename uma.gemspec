@@ -15,13 +15,13 @@ Gem::Specification.new do |s|
     'documentation_uri' => 'https://www.rubydoc.info/gems/uma',
     'changelog_uri' => 'https://github.com/digital-fabric/uma/blob/main/CHANGELOG.md'
   }
-  s.rdoc_options  = ['--title', 'Extralite', '--main', 'README.md']
+  s.rdoc_options  = ['--title', 'Uma', '--main', 'README.md']
   s.extra_rdoc_files = ['README.md']
   s.require_paths = ['lib']
-  s.required_ruby_version = '>= 3.4'
-  s.executables = ['syntropy']
+  s.required_ruby_version = '>= 4.0'
+  s.executables = ['uma']
 
-  s.add_dependency 'uringmachine',  '>=0.28.0'
+  s.add_dependency 'uringmachine',  '>=0.28.2'
   s.add_dependency 'rack',          '~>3.2.5'
   s.add_dependency 'logger'
 

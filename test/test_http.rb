@@ -246,4 +246,27 @@ class HTTPTest < UMBaseTest
       "foo1\nYou said: blahBlah"
     )
   end
+
+  def test_partial_hijack
+    req_resp_lint(
+      ->(env) {
+        if env['rack.hijack?']
+          [
+            200,
+            {
+              'Foo' => 'barbaz',
+              'rack.hijack' => ->(io) {
+                io.puts 'bouyakasha'
+                io.close
+              }
+            },
+            '']
+        else
+          [500, {}, "No hijack"]
+        end
+      },
+      "GET / HTTP/1.1\r\n\r\n",
+      "HTTP/1.1 200\r\nFoo: barbaz\r\n\r\nbouyakasha\n"
+    )
+  end
 end
