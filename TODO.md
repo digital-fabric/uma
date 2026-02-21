@@ -17,8 +17,8 @@ Rack interface.
 
 - [v] http rack control cycle
 
-- [ ] Rack hijack (full/partial)
-- [ ] More Rack tests. Where can they come from?
+- [v] Rack hijack (full/partial)
+- [v] More Rack tests. Where can they come from?
   - [ ] Roda apps
 
 - [ ] application loading / bootstrapping

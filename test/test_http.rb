@@ -140,6 +140,73 @@ class HTTPTest < UMBaseTest
     assert_equal "HTTP/1.1 200\r\nfoo: bar\r\ntransfer-encoding: chunked\r\n\r\n4\r\nhiho\r\nd\r\nencyclopaedia\r\n0\r\n\r\n", buf
   end
 
+  def test_parse_header
+    e = Uma::HTTP::ParseError
+    assert_raises(e) { HTTP.parse_header({}, 'foo')}
+    assert_raises(e) { HTTP.parse_header({}, 'foo:')}
+
+    HTTP.parse_header((env = {}), 'fOo: bAr')
+    assert_equal({ 'HTTP_FOO' => 'bAr' }, env)
+
+    HTTP.parse_header((env = {}), 'content-length: 80')
+    assert_equal({ 'CONTENT_LENGTH' => '80' }, env)
+
+    HTTP.parse_header((env = {}), 'Content-length: 80')
+    assert_equal({ 'CONTENT_LENGTH' => '80' }, env)
+
+    HTTP.parse_header((env = {}), 'Content-type: foo')
+    assert_equal({ 'CONTENT_TYPE' => 'foo' }, env)
+
+    HTTP.parse_header((env = {}), 'Accept: bar')
+    assert_equal({ 'HTTP_ACCEPT' => 'bar' }, env)
+
+    HTTP.parse_header((env = {}), 'host: foo.bar')
+    assert_equal({
+      'HTTP_HOST' => 'foo.bar',
+      'SERVER_NAME' => 'foo.bar'
+    }, env)
+  end
+
+  def test_parse_request_line
+    e = Uma::HTTP::ParseError
+    assert_raises(e) { HTTP.parse_header({}, '')}
+    assert_raises(e) { HTTP.parse_header({}, 'foo')}
+    assert_raises(e) { HTTP.parse_header({}, 'GET /tr')}
+    assert_raises(e) { HTTP.parse_header({}, 'GET HTTP')}
+
+    HTTP.parse_request_line((env = {}), 'geT /foo HTTP/1.1')
+    assert_equal({
+      'REQUEST_METHOD' => 'get',
+      'PATH_INFO' => '/foo',
+      'QUERY_STRING' => '',
+      'SERVER_PROTOCOL' => 'HTTP/1.1'
+    }, env)
+
+    HTTP.parse_request_line((env = {}), 'geT /foo?q=3&r=4 HTTP/1.1')
+    assert_equal({
+      'REQUEST_METHOD' => 'get',
+      'PATH_INFO' => '/foo',
+      'QUERY_STRING' => 'q=3&r=4',
+      'SERVER_PROTOCOL' => 'HTTP/1.1'
+    }, env)
+  end
+
+  def test_get_request_env
+    config = Uma::ServerControl.server_config({})
+    stream = UM::Stream.new(machine, @s2)
+
+    machine.sendv(@s1, "GET /a HTTP/1.1\r\n\r\n")
+    env = HTTP.get_request_env(config, stream)
+    assert_kind_of Hash, env
+    assert_equal 'http', env['rack.url_scheme']
+    assert_equal true, env['rack.hijack?']
+    assert_kind_of Proc, env['rack.hijack']
+    assert_equal 'get', env['REQUEST_METHOD']
+    assert_equal '/a', env['PATH_INFO']
+    assert_equal '', env['QUERY_STRING']
+    assert_equal 'HTTP/1.1', env['SERVER_PROTOCOL']
+  end
+
   class MockErrorStream
     def initialize(&block)
       @write_block = block
@@ -156,6 +223,7 @@ class HTTPTest < UMBaseTest
     def flush = self
     def close = self
   end
+
   def make_http_request(app, req, send_resp = true)
     fd1, fd2 = UM.socketpair(UM::AF_UNIX, UM::SOCK_STREAM, 0)
 
