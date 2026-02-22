@@ -122,9 +122,10 @@ module Uma
       rack_response = config[:app].(env)
       if !env['uma.hijacked?']
         send_rack_response(machine, env, fd, rack_response)
+        should_process_next_request?(env)
+      else
+        false
       end
-
-      should_process_next_request?(env)
     rescue => e
       if (h = config[:error_handler])
         h.(e)
