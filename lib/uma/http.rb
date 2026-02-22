@@ -107,7 +107,7 @@ module Uma
     end
 
     extend self
-    
+
     def http_connection(machine, config, fd)
       stream = UM::Stream.new(machine, fd)
       while true
@@ -117,6 +117,7 @@ module Uma
 
     def process_request(machine, config, fd, stream)
       env = get_request_env(config, stream)
+      return false if !env
 
       rack_response = config[:app].(env)
       if !env['uma.hijacked?']
@@ -128,9 +129,6 @@ module Uma
       if (h = config[:error_handler])
         h.(e)
       else
-        p e
-        p e.backtrace
-        exit!
         send_error_response(machine, fd, e)
       end
     end
@@ -218,7 +216,7 @@ module Uma
 
       buf_status = "HTTP/1.1 #{status}\r\n"
       buf_headers = format_headers(headers)
-      
+
       if hijack
         machine.sendv(fd, buf_status, buf_headers)
         hijack.(env['rack.hijack'].())
@@ -275,7 +273,7 @@ module Uma
         else
           raise ResponseError, "Invalid response body: #{body.inspect}"
         end
-        
+
         chunked_stream.close if chunked_stream
         body.close if body.respond_to?(:close)
       end

@@ -17,7 +17,7 @@ module Uma
       @threads = @config[:thread_count].times.map {
         ServerControl.start_worker_thread(@config, @stop_queue)
       }
-      
+
       ServerControl.await_process_termination(@machine)
 
       stop
@@ -80,7 +80,7 @@ module Uma
       accept_fibers = start_acceptors(machine, config, connection_fibers)
 
       machine.shift(stop_queue)
-        
+
       worker_thread_graceful_stop(machine, accept_fibers, connection_fibers)
     end
 
@@ -140,7 +140,7 @@ module Uma
 
     def await_process_termination(machine)
       sig_queue = UM::Queue.new
-      
+
       old_term_handler = trap('SIGTERM') {
         machine.push(sig_queue, :term)
         trap('SIGTERM', old_term_handler)

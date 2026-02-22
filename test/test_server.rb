@@ -136,7 +136,7 @@ class ServerControlTest < UMBaseTest
       }
     }
     ff = Set.new
-    
+
     f = ServerControl.start_connection(machine, config, ff, s2)
     assert_kind_of Fiber, f
     assert_equal 0, ff.size
@@ -144,7 +144,7 @@ class ServerControlTest < UMBaseTest
     machine.snooze
     assert_equal 1, ff.size
     assert_equal [f], ff.to_a
-    
+
     machine.write(s1, 'foobar')
     buf = +''
     machine.read(s1, buf, 128)
@@ -236,7 +236,7 @@ class ServerControlTest < UMBaseTest
     th = ServerControl.start_worker_thread(config, stop_queue)
 
     machine.sleep(0.05)
-    
+
     sock1 = machine.socket(UM::AF_INET, UM::SOCK_STREAM, 0, 0)
     res = machine.connect(sock1, '127.0.0.1', port1)
     assert_equal 0, res
@@ -269,7 +269,7 @@ class ServerControlTest < UMBaseTest
       ],
       connection_proc: ->(machine, fd) {
         machine.send(fd, 'hi', 2, 0)
-      } 
+      }
     }
     connection_fibers = []
     accept_fibers = ServerControl.start_acceptors(machine, config, connection_fibers)

@@ -82,7 +82,7 @@ class UMBaseTest < Minitest::Test
   end
 
   @@port ||= 10001 + SecureRandom.rand(50000)
-  
+
   def random_port
     @@port_assign_mutex ||= Mutex.new
     @@port_assign_mutex.synchronize do

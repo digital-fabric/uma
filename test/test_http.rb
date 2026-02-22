@@ -26,10 +26,6 @@ class HTTPTest < UMBaseTest
 
     f = machine.spin do
       HTTP.http_connection(machine, config, @s2)
-    rescue => e
-      p e
-      p e.backtrace
-      exit!
     end
 
     request = "GET / HTTP/1.1\r\n\r\n"
@@ -235,7 +231,7 @@ class HTTPTest < UMBaseTest
     machine.shutdown(fd1, UM::SHUT_WR)
     stream = UM::Stream.new(machine, fd2)
     env = HTTP.get_request_env(config, stream)
-    
+
     return if !send_resp
 
     response = app.(env)

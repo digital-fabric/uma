@@ -3,6 +3,7 @@
 
 require_relative 'helper'
 require 'uma/cli'
+require 'uma/http'
 require 'uma/version'
 
 class CLITest < UMBaseTest
@@ -82,18 +83,17 @@ class CLITest < UMBaseTest
 
   def test_cli_serve_mock
     @env[:h] = {}
+    @env[:connection_proc] = true
     @env[:server_class] = MockServer
-    
+
     cli_cmd_raise('serve')
     assert_kind_of Hash, @env[:h][:env]
   end
 
-
-
   def test_cli_serve_controller
     @env[:h] = {}
     @env[:norun] = true
-    
+
     controller = cli_cmd_raise('serve')
     assert_kind_of Uma::CLI::Serve, controller
 
@@ -105,14 +105,14 @@ class CLITest < UMBaseTest
 
   def test_cli_serve_running
     port = random_port
-    
+
     @env.merge!(
       bind: "127.0.0.1:#{port}",
       connection_proc: ->(machine, fd) {
         machine.write(fd, "foo")
       }
     )
-    
+
     pid = fork {
       cli_cmd_raise('serve')
     }
@@ -125,6 +125,35 @@ class CLITest < UMBaseTest
     buf = +''
     machine.recv(sock1, buf, 128, 0)
     assert_equal 'foo', buf
+  ensure
+    machine.close(sock1) rescue nil
+    if pid
+      Process.kill('SIGTERM', pid)
+      Process.wait(pid)
+    end
+  end
+
+  def test_cli_serve_app_running
+    port = random_port
+
+    @env.merge!(
+      bind: "127.0.0.1:#{port}"
+    )
+
+    pid = fork do
+      cli_cmd_raise('serve', 'test/simple.ru')
+    rescue Interrupt
+    end
+
+    machine.sleep(0.08)
+
+    sock1 = machine.socket(UM::AF_INET, UM::SOCK_STREAM, 0, 0)
+    res = machine.connect(sock1, '127.0.0.1', port)
+    assert_equal 0, res
+    buf = +''
+    machine.sendv(sock1, "GET /foo HTTP/1.1\r\n\r\n")
+    machine.recv(sock1, buf, 128, 0)
+    assert_equal "HTTP/1.1 200\r\ntransfer-encoding: chunked\r\n\r\n6\r\nsimple\r\n0\r\n\r\n", buf
   ensure
     machine.close(sock1) rescue nil
     if pid

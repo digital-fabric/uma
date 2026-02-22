@@ -25,6 +25,8 @@ Rack interface.
   - [ ] load .ru files
   - [ ] process warmup
 
+- [ ] load apps with `uma serve`
+
 - [ ] benchmarks
   - [ ] compare to falcon, puma
   - [ ] using a Roda app with a few different endpoints representing different

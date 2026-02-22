@@ -3,6 +3,7 @@
 require 'uma/cli/error'
 require 'uma/version'
 require 'uma/server'
+require 'uma/app'
 require 'optparse'
 
 module Uma
@@ -154,12 +155,12 @@ module Uma
           ●╰───╯●  https://uma.noteflakes.com/
              ●
 
-        Usage: uma serve [OPTIONS] app.ru
+        Usage: uma serve [OPTIONS] [location]
 
       EOF
 
       def parse_argv
-        parser = OptionParser.new() do |o|
+        parser = OptionParser.new do |o|
           o.banner = HELP_BANNER
 
           o.on('-b', '--bind BIND', String,
@@ -183,6 +184,18 @@ module Uma
         end
 
         parser.parse!(argv)
+        load_rackup_file(argv) if !@env[:connection_proc]
+      end
+
+      def load_rackup_file(argv)
+        location = File.expand_path(argv.first || '.')
+        if File.directory?(location)
+          fn = File.join(location, 'config.ru')
+        else
+          fn = location
+        end
+        app = App.new(fn)
+        @env[:connection_proc] = app.connection_proc
       end
     end
   end
