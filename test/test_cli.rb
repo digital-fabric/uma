@@ -133,7 +133,7 @@ class CLITest < UMBaseTest
     end
   end
 
-  def test_cli_serve_app_running
+  def test_cli_serve_with_app
     port = random_port
 
     @env.merge!(
@@ -141,7 +141,7 @@ class CLITest < UMBaseTest
     )
 
     pid = fork do
-      cli_cmd_raise('serve', 'test/simple.ru')
+      cli_cmd_raise('serve', File.join(__dir__, 'apps/simple.ru'))
     rescue Interrupt
     end
 
@@ -154,6 +154,35 @@ class CLITest < UMBaseTest
     machine.sendv(sock1, "GET /foo HTTP/1.1\r\n\r\n")
     machine.recv(sock1, buf, 128, 0)
     assert_equal "HTTP/1.1 200\r\ntransfer-encoding: chunked\r\n\r\n6\r\nsimple\r\n0\r\n\r\n", buf
+  ensure
+    machine.close(sock1) rescue nil
+    if pid
+      Process.kill('SIGTERM', pid)
+      Process.wait(pid)
+    end
+  end
+
+  def test_cli_serve_with_default_app
+    port = random_port
+
+    @env.merge!(
+      bind: "127.0.0.1:#{port}"
+    )
+
+    pid = fork do
+      cli_cmd_raise('serve', File.join(__dir__, 'apps'))
+    rescue Interrupt
+    end
+
+    machine.sleep(0.08)
+
+    sock1 = machine.socket(UM::AF_INET, UM::SOCK_STREAM, 0, 0)
+    res = machine.connect(sock1, '127.0.0.1', port)
+    assert_equal 0, res
+    buf = +''
+    machine.sendv(sock1, "GET /foo HTTP/1.1\r\n\r\n")
+    machine.recv(sock1, buf, 128, 0)
+    assert_equal "HTTP/1.1 200\r\ntransfer-encoding: chunked\r\n\r\n14\r\nHello from config.ru\r\n0\r\n\r\n", buf
   ensure
     machine.close(sock1) rescue nil
     if pid

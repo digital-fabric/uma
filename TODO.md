@@ -21,11 +21,11 @@ Rack interface.
 - [v] More Rack tests. Where can they come from?
   - [ ] Roda apps
 
-- [ ] application loading / bootstrapping
-  - [ ] load .ru files
-  - [ ] process warmup
+- [v] application loading / bootstrapping
+  - [v] load .ru files
+  - [v] process warmup
 
-- [ ] load apps with `uma serve`
+- [v] load apps with `uma serve`
 
 - [ ] benchmarks
   - [ ] compare to falcon, puma

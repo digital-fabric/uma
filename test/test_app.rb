@@ -7,7 +7,7 @@ class AppTest < UMBaseTest
   App = Uma::App
 
   def test_app
-    fn = File.join(__dir__, 'simple.ru')
+    fn = File.join(__dir__, 'apps/simple.ru')
     app = App.new(fn)
 
     assert_kind_of App, app
@@ -15,12 +15,12 @@ class AppTest < UMBaseTest
   end
 
   def test_app_bad_filename
-    fn = File.join(__dir__, 'simple2.ru')
+    fn = File.join(__dir__, 'apps/simple2.ru')
     assert_raises(Uma::Error) { App.new(fn) }
   end
 
   def test_app_invalid_syntax
-    fn = File.join(__dir__, 'bad_syntax.ru')
+    fn = File.join(__dir__, 'apps/bad_syntax.ru')
     assert_raises(Uma::Error) { App.new(fn) }
   end
 end
