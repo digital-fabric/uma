@@ -204,13 +204,11 @@ module Uma
       status, headers, body = response
       hijack = headers['rack.hijack']
 
+      empty_body = body.nil? || body == '' || (body.is_a?(Array) && body.empty?)
+
       if !hijack
         chunked = nil
-        case body
-        when nil, ''
-          headers['content-length'] = '0'
-        end
-
+        headers['content-length'] = '0' if empty_body
         chunked = !headers['content-length']
         headers['transfer-encoding'] = 'chunked' if chunked
       end
@@ -221,11 +219,15 @@ module Uma
       if hijack
         machine.sendv(fd, buf_status, buf_headers)
         hijack.(env['rack.hijack'].())
-      elsif body
+      elsif body && !empty_body
         if chunked
           send_body_chunked(machine, env, fd, buf_status, buf_headers, body)
         else
-          machine.sendv(fd, buf_status, buf_headers, body)
+          if body.is_a?(Array)
+            machine.sendv(fd, buf_status, buf_headers, *body)
+          else
+            machine.sendv(fd, buf_status, buf_headers, body)
+          end
         end
       else
         machine.sendv(fd, buf_status, buf_headers)
