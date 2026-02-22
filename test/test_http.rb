@@ -172,7 +172,7 @@ class HTTPTest < UMBaseTest
 
     HTTP.parse_request_line((env = {}), 'geT /foo HTTP/1.1')
     assert_equal({
-      'REQUEST_METHOD' => 'get',
+      'REQUEST_METHOD' => 'GET',
       'PATH_INFO' => '/foo',
       'QUERY_STRING' => '',
       'SERVER_PROTOCOL' => 'HTTP/1.1'
@@ -180,7 +180,7 @@ class HTTPTest < UMBaseTest
 
     HTTP.parse_request_line((env = {}), 'geT /foo?q=3&r=4 HTTP/1.1')
     assert_equal({
-      'REQUEST_METHOD' => 'get',
+      'REQUEST_METHOD' => 'GET',
       'PATH_INFO' => '/foo',
       'QUERY_STRING' => 'q=3&r=4',
       'SERVER_PROTOCOL' => 'HTTP/1.1'
@@ -197,7 +197,7 @@ class HTTPTest < UMBaseTest
     assert_equal 'http', env['rack.url_scheme']
     assert_equal true, env['rack.hijack?']
     assert_kind_of Proc, env['rack.hijack']
-    assert_equal 'get', env['REQUEST_METHOD']
+    assert_equal 'GET', env['REQUEST_METHOD']
     assert_equal '/a', env['PATH_INFO']
     assert_equal '', env['QUERY_STRING']
     assert_equal 'HTTP/1.1', env['SERVER_PROTOCOL']

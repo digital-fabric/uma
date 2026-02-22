@@ -171,7 +171,7 @@ module Uma
       m = line.match(RE_REQUEST_LINE)
       raise ParseError, 'Invalid request line' if !m
 
-      env['REQUEST_METHOD']   = m[1].downcase
+      env['REQUEST_METHOD']   = m[1].upcase
       env['PATH_INFO']        = m[2]
       env['QUERY_STRING']     = m[3] || ''
       env['SERVER_PROTOCOL']  = m[4]
