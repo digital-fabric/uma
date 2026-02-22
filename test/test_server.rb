@@ -122,7 +122,7 @@ class ServerControlTest < UMBaseTest
 
     assert_equal %w{
       accept_0_terminated accept_1_terminated accept_2_terminated
-      connection_0_done connection_1_done connection_2_done
+      connection_0_terminated connection_1_terminated connection_2_terminated
     }, buf.sort
   end
 

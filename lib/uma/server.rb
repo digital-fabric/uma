@@ -125,15 +125,17 @@ module Uma
 
     def worker_thread_graceful_stop(machine, accept_fibers, connection_fibers)
       # stop accepting connections
-      accept_fibers.each { machine.schedule(it, UM::Terminate.new) }
+      machine.terminate(accept_fibers)
       machine.await_fibers(accept_fibers)
+
+      machine.terminate(connection_fibers)
 
       # graceful stop with a timeout of 10 seconds
       machine.timeout(10, UM::Terminate) do
         machine.await_fibers(connection_fibers)
       rescue UM::Terminate
         alive = connection_fibers.reject(&:done?)
-        alive.each { machine.schedule(it, UM::Terminate.new) }
+        machine.terminate(alive)
         machine.await_fibers(alive)
       end
     end

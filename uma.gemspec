@@ -21,10 +21,8 @@ Gem::Specification.new do |s|
   s.required_ruby_version = '>= 4.0'
   s.executables = ['uma']
 
-  s.add_dependency 'uringmachine',  '>=0.28.2'
-  s.add_dependency 'rack',          '~>3.2.5'
+  s.add_dependency 'uringmachine',  '>=0.28.3'
+  s.add_dependency 'rack',          '~>3.2'
   s.add_dependency 'logger'
 
-  s.add_development_dependency 'minitest',  '~>6.0.1'
-  s.add_development_dependency 'rake',      '~>13.3.1'
 end

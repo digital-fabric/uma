@@ -103,30 +103,50 @@ class CLITest < UMBaseTest
     server.stop
   end
 
+  def socket_connect(host, port, retries = 0)
+    sock = machine.socket(UM::AF_INET, UM::SOCK_STREAM, 0, 0)
+    res = machine.connect(sock, '127.0.0.1', port)
+    assert_equal 0, res
+    sock
+  rescue SystemCallError
+    if retries < 10
+      machine.sleep(0.05)
+      socket_connect(host, port, retries + 1)
+    else
+      raise
+    end
+  end
+
+  def make_request(host, port, req)
+    sock = socket_connect(host, port)
+    machine.sendv(sock, req) if req
+    buf = +''
+    machine.recv(sock, buf, 8192, 0)
+    buf
+  end
+
+  def fork_server(*args, **opts)
+    @env.merge!(opts)
+    pid = fork do
+      cli_cmd_raise('serve', *args)
+    end
+    pid
+  end
+
   def test_cli_serve_running
     port = random_port
 
-    @env.merge!(
+    pid = fork_server(
       bind: "127.0.0.1:#{port}",
       connection_proc: ->(machine, fd) {
         machine.write(fd, "foo")
       }
     )
 
-    pid = fork {
-      cli_cmd_raise('serve')
-    }
-
-    machine.sleep(0.08)
-
-    sock1 = machine.socket(UM::AF_INET, UM::SOCK_STREAM, 0, 0)
-    res = machine.connect(sock1, '127.0.0.1', port)
-    assert_equal 0, res
-    buf = +''
-    machine.recv(sock1, buf, 128, 0)
-    assert_equal 'foo', buf
+    resp = make_request('127.0.0.1', port, nil)
+    assert_equal 'foo', resp
   ensure
-    machine.close(sock1) rescue nil
+    machine.close(sock) rescue nil
     if pid
       Process.kill('SIGTERM', pid)
       Process.wait(pid)
@@ -136,26 +156,18 @@ class CLITest < UMBaseTest
   def test_cli_serve_with_app
     port = random_port
 
-    @env.merge!(
+    pid = fork_server(
+      File.join(__dir__, 'apps/simple.ru'),
       bind: "127.0.0.1:#{port}"
     )
 
-    pid = fork do
-      cli_cmd_raise('serve', File.join(__dir__, 'apps/simple.ru'))
-    rescue Interrupt
-    end
-
-    machine.sleep(0.08)
-
-    sock1 = machine.socket(UM::AF_INET, UM::SOCK_STREAM, 0, 0)
-    res = machine.connect(sock1, '127.0.0.1', port)
-    assert_equal 0, res
-    buf = +''
-    machine.sendv(sock1, "GET /foo HTTP/1.1\r\n\r\n")
-    machine.recv(sock1, buf, 128, 0)
-    assert_equal "HTTP/1.1 200\r\ntransfer-encoding: chunked\r\n\r\n6\r\nsimple\r\n0\r\n\r\n", buf
+    resp = make_request(
+      '127.0.0.1', port,
+      "GET /foo HTTP/1.1\r\n\r\n"
+    )
+    assert_equal "HTTP/1.1 200\r\ntransfer-encoding: chunked\r\n\r\n6\r\nsimple\r\n0\r\n\r\n", resp
   ensure
-    machine.close(sock1) rescue nil
+    machine.close(sock) rescue nil
     if pid
       Process.kill('SIGTERM', pid)
       Process.wait(pid)
@@ -165,26 +177,63 @@ class CLITest < UMBaseTest
   def test_cli_serve_with_default_app
     port = random_port
 
-    @env.merge!(
+    pid = fork_server(
+      File.join(__dir__, 'apps'),
       bind: "127.0.0.1:#{port}"
     )
 
-    pid = fork do
-      cli_cmd_raise('serve', File.join(__dir__, 'apps'))
-    rescue Interrupt
-    end
-
-    machine.sleep(0.08)
-
-    sock1 = machine.socket(UM::AF_INET, UM::SOCK_STREAM, 0, 0)
-    res = machine.connect(sock1, '127.0.0.1', port)
-    assert_equal 0, res
-    buf = +''
-    machine.sendv(sock1, "GET /foo HTTP/1.1\r\n\r\n")
-    machine.recv(sock1, buf, 128, 0)
-    assert_equal "HTTP/1.1 200\r\ntransfer-encoding: chunked\r\n\r\n14\r\nHello from config.ru\r\n0\r\n\r\n", buf
+    resp = make_request(
+      '127.0.0.1', port,
+      "GET /foo HTTP/1.1\r\n\r\n"
+    )
+    assert_equal "HTTP/1.1 200\r\ntransfer-encoding: chunked\r\n\r\n14\r\nHello from config.ru\r\n0\r\n\r\n", resp
   ensure
-    machine.close(sock1) rescue nil
+    machine.close(sock) rescue nil
+    if pid
+      Process.kill('SIGTERM', pid)
+      Process.wait(pid)
+    end
+  end
+
+  def test_cli_serve_roda1
+    port = random_port
+
+    pid = fork_server(
+      File.join(__dir__, 'apps/roda1.ru'),
+      bind: "127.0.0.1:#{port}"
+    )
+
+    resp = make_request(
+      '127.0.0.1', port,
+      "GET /foo HTTP/1.1\r\n\r\n"
+    )
+    assert_equal "HTTP/1.1 404\r\ncontent-type: text/html\r\ncontent-length: 0\r\n\r\n", resp
+
+    resp = make_request(
+      '127.0.0.1', port,
+      "GET / HTTP/1.1\r\n\r\n"
+    )
+    assert_equal "HTTP/1.1 302\r\nlocation: /hello\r\ncontent-type: text/html\r\ncontent-length: 0\r\n\r\n", resp
+
+    resp = make_request(
+      '127.0.0.1', port,
+      "GET /hello HTTP/1.1\r\n\r\n"
+    )
+    assert_equal "HTTP/1.1 200\r\ncontent-type: text/html\r\ncontent-length: 6\r\n\r\nHello!", resp
+
+    resp = make_request(
+      '127.0.0.1', port,
+      "GET /hello/world HTTP/1.1\r\n\r\n"
+    )
+    assert_equal "HTTP/1.1 200\r\ncontent-type: text/html\r\ncontent-length: 12\r\n\r\nHello world!", resp
+
+    resp = make_request(
+      '127.0.0.1', port,
+      "POST /hello HTTP/1.1\r\n\r\n"
+    )
+    assert_equal "HTTP/1.1 302\r\nlocation: /hello\r\ncontent-type: text/html\r\ncontent-length: 0\r\n\r\n", resp
+  ensure
+    machine.close(sock) rescue nil
     if pid
       Process.kill('SIGTERM', pid)
       Process.wait(pid)
