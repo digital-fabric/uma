@@ -31,7 +31,7 @@ module Uma
     end
 
     def eval_app_code
-      eval(get_code)
+      eval(get_code, binding, @fn)
     rescue SyntaxError, NameError => e
       raise Uma::Error, e.message
     end

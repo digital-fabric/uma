@@ -27,6 +27,12 @@ Rack interface.
 
 - [v] load apps with `uma serve`
 
+- [ ] uma serve - error if no bind address given
+
+- [ ] logging
+  - [ ] In conformance with Rack spec
+  - [ ] JSON format
+
 - [ ] benchmarks
   - [ ] compare to falcon, puma
   - [ ] using a Roda app with a few different endpoints representing different
