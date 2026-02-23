@@ -1,7 +1,7 @@
 require_relative './lib/uma/version'
 
 Gem::Specification.new do |s|
-  s.name        = 'Uma'
+  s.name        = 'uma'
   s.summary     = 'Uma is a Ruby app server'
   s.version       = Uma::VERSION
   s.licenses      = ['MIT']
