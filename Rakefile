@@ -8,14 +8,14 @@ task :test do
 end
 
 task :release do
-  require_relative './lib/syntropy/version'
-  version = Syntropy::VERSION
+  require_relative './lib/uma/version'
+  version = Uma::VERSION
 
-  puts 'Building syntropy...'
-  `gem build syntropy.gemspec`
+  puts 'Building uma...'
+  `gem build uma.gemspec`
 
-  puts "Pushing syntropy #{version}..."
-  `gem push syntropy-#{version}.gem`
+  puts "Pushing uma #{version}..."
+  `gem push uma-#{version}.gem`
 
   puts "Cleaning up..."
   `rm *.gem`
